@@ -153,6 +153,9 @@ type Parser struct {
 	// excludes excludes dirs and files in SearchDir
 	excludes map[string]struct{}
 
+	// includes includes dirs and files in SearchDir
+	includes map[string]struct{}
+
 	// packagePrefix is a list of package path prefixes, packages that do not
 	// match any one of them will be excluded when searching.
 	packagePrefix []string
@@ -226,6 +229,7 @@ func New(options ...func(*Parser)) *Parser {
 		parsedSchemas:      make(map[*TypeSpecDef]*Schema),
 		outputSchemas:      make(map[*TypeSpecDef]*Schema),
 		excludes:           make(map[string]struct{}),
+		includes:           make(map[string]struct{}),
 		tags:               make(map[string]struct{}),
 		fieldParserFactory: newTagBaseFieldParser,
 		Overrides:          make(map[string]string),
@@ -272,6 +276,19 @@ func SetExcludedDirsAndFiles(excludes string) func(*Parser) {
 			if f != "" {
 				f = filepath.Clean(f)
 				p.excludes[f] = struct{}{}
+			}
+		}
+	}
+}
+
+// SetIncludedDirsAndFiles sets directories and files to be included when searching.
+func SetIncludedDirsAndFiles(includes string) func(*Parser) {
+	return func(p *Parser) {
+		for _, f := range strings.Split(includes, ",") {
+			f = strings.TrimSpace(f)
+			if f != "" {
+				f = filepath.Clean(f)
+				p.includes[f] = struct{}{}
 			}
 		}
 	}
@@ -1659,6 +1676,11 @@ func (parser *Parser) getAllGoFileInfo(packageDir, searchDir string) error {
 		return nil // ignored by user-defined package path prefixes
 	}
 	return filepath.Walk(searchDir, func(path string, f os.FileInfo, _ error) error {
+
+		if path == searchDir {
+			return nil
+		}
+
 		err := parser.Skip(path, f)
 		if err != nil {
 			return err
@@ -1764,16 +1786,24 @@ func (parser *Parser) checkOperationIDUniqueness() error {
 
 // Skip returns filepath.SkipDir error if match vendor and hidden folder.
 func (parser *Parser) Skip(path string, f os.FileInfo) error {
-	return walkWith(parser.excludes, parser.ParseVendor)(path, f)
+	return walkWith(parser.excludes, parser.includes, parser.ParseVendor)(path, f)
 }
 
-func walkWith(excludes map[string]struct{}, parseVendor bool) func(path string, fileInfo os.FileInfo) error {
+func walkWith(excludes, includes map[string]struct{}, parseVendor bool) func(path string, fileInfo os.FileInfo) error {
 	return func(path string, f os.FileInfo) error {
 		if f.IsDir() {
 			if !parseVendor && f.Name() == "vendor" || // ignore "vendor"
 				f.Name() == "docs" || // exclude docs
 				len(f.Name()) > 1 && f.Name()[0] == '.' && f.Name() != ".." { // exclude all hidden folder
 				return filepath.SkipDir
+			}
+
+			if includes != nil && len(includes) > 0 {
+				if _, ok := includes[path]; ok {
+					return nil
+				} else {
+					return filepath.SkipDir
+				}
 			}
 
 			if excludes != nil {

@@ -26,9 +26,11 @@ var outputTypes = []string{"go", "json", "yaml"}
 
 func TestGen_Build(t *testing.T) {
 	config := &Config{
-		SearchDir:          searchDir,
-		MainAPIFile:        "./main.go",
-		OutputDir:          "../testdata/simple/docs",
+		SearchDir:   searchDir,
+		MainAPIFile: "./main.go",
+		OutputDir:   "../testdata/simple/docs",
+		//Excludes:           " ../testdata/simple/cross",
+		//Includes:           "../testdata/simple/cross,../testdata/simple/web",
 		OutputTypes:        outputTypes,
 		PropNamingStrategy: "",
 	}
